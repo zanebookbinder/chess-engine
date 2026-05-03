@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from src.zobrist import compute_zobrist
 from src.constants import (
     WHITE, BLACK, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING,
     CASTLE_WHITE_KINGSIDE, CASTLE_WHITE_QUEENSIDE,
@@ -21,6 +22,7 @@ class BoardSnapshot:
     castling_rights_before: int
     en_passant_target_before: Optional[tuple[int, int]]
     halfmove_clock_before: int
+    zobrist_hash_before: int = 0
 
 
 class Board:
@@ -32,6 +34,7 @@ class Board:
         self.halfmove_clock: int = 0
         self.fullmove_number: int = 1
         self._history: list[BoardSnapshot] = []
+        self.zobrist_hash: int = 0
 
     # ------------------------------------------------------------------
     # Setup
@@ -52,6 +55,9 @@ class Board:
         self.halfmove_clock = 0
         self.fullmove_number = 1
         self._history = []
+        self.zobrist_hash = compute_zobrist(
+            self.grid, self.side_to_move, self.castling_rights, self.en_passant_target
+        )
 
     @classmethod
     def from_fen(cls, fen: str) -> "Board":
@@ -91,6 +97,9 @@ class Board:
         board.halfmove_clock  = int(parts[4]) if len(parts) > 4 else 0
         board.fullmove_number = int(parts[5]) if len(parts) > 5 else 1
         board._history = []
+        board.zobrist_hash = compute_zobrist(
+            board.grid, board.side_to_move, board.castling_rights, board.en_passant_target
+        )
         return board
 
     def to_fen(self) -> str:
@@ -180,6 +189,7 @@ class Board:
             castling_rights_before=self.castling_rights,
             en_passant_target_before=self.en_passant_target,
             halfmove_clock_before=self.halfmove_clock,
+            zobrist_hash_before=self.zobrist_hash,
         )
 
         # Reset en passant target (will be set below if double push)
@@ -227,6 +237,9 @@ class Board:
             self.fullmove_number += 1
 
         self.side_to_move ^= 1
+        self.zobrist_hash = compute_zobrist(
+            self.grid, self.side_to_move, self.castling_rights, self.en_passant_target
+        )
         self._history.append(snapshot)
 
     def unmake_move(self) -> None:
@@ -263,6 +276,8 @@ class Board:
             rook_src, rook_dst = CASTLING_ROOK_SQUARES[(self.side_to_move, kingside)]
             self.grid[rook_src[0]][rook_src[1]] = self.grid[rook_dst[0]][rook_dst[1]]
             self.grid[rook_dst[0]][rook_dst[1]] = None
+
+        self.zobrist_hash = snapshot.zobrist_hash_before
 
     # ------------------------------------------------------------------
     # Attack detection
