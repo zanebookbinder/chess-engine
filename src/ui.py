@@ -52,6 +52,9 @@ class ChessUI:
         self._drag_start_pos: tuple[int, int] = (0, 0)
         self._drag_legal_dests: list[tuple[int, int]] = []
 
+        # Engine thinking progress: (move_label, moves_done, total_moves)
+        self._engine_progress: Optional[tuple[str, int, int]] = None
+
         self._piece_images = self._load_piece_images()
         self._font_large  = pygame.font.SysFont("segoe ui symbol", SQUARE_SIZE - 8)
         self._font_label  = pygame.font.SysFont("Arial", 13, bold=True)
@@ -93,6 +96,7 @@ class ChessUI:
         self._dragging = False
         self._drag_from_sq = None
         self._drag_legal_dests = []
+        self._engine_progress = None
         self._state = "color_select"
 
     # ------------------------------------------------------------------
@@ -219,11 +223,19 @@ class ChessUI:
             self._trigger_engine_move()
 
     def _trigger_engine_move(self) -> None:
+        self._engine_progress = None
         self._status_message = "Engine thinking..."
         self._render()
         pygame.display.flip()
 
-        move = self._engine.get_best_move()
+        def on_progress(move: Move, idx: int, total: int) -> None:
+            self._engine_progress = (self._move_to_display(move), idx, total)
+            pygame.event.pump()
+            self._render()
+            pygame.display.flip()
+
+        move = self._engine.get_best_move(on_progress=on_progress)
+        self._engine_progress = None
         if move:
             self._board.make_move(move)
             self._last_move = move
@@ -437,6 +449,21 @@ class ChessUI:
             msg = self._font_small.render(self._status_message, True, (200, 200, 100))
             self._screen.blit(msg, (px + 10, y))
             y += msg.get_height() + 6
+            if self._engine_progress is not None:
+                move_label, idx, total = self._engine_progress
+                exp = self._font_small.render(f"Exploring {move_label}...", True, (130, 160, 200))
+                self._screen.blit(exp, (px + 10, y))
+                y += exp.get_height() + 4
+                bar_w = PANEL_WIDTH - 20
+                bar_h = 10
+                bx = px + 10
+                pygame.draw.rect(self._screen, (50, 50, 50), (bx, y, bar_w, bar_h), border_radius=4)
+                fill_w = int(bar_w * (idx + 1) / max(total, 1))
+                if fill_w > 0:
+                    pygame.draw.rect(self._screen, (80, 140, 200), (bx, y, fill_w, bar_h), border_radius=4)
+                pct = self._font_label.render(f"{idx + 1}/{total}", True, (120, 120, 120))
+                self._screen.blit(pct, (px + PANEL_WIDTH - pct.get_width() - 10, y - 1))
+                y += bar_h + 6
         else:
             if self._board.side_to_move == WHITE:
                 turn_text, turn_color = "White to move", (240, 240, 240)

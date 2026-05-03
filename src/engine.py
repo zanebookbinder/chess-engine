@@ -39,7 +39,9 @@ class Engine:
     # Public API
     # ------------------------------------------------------------------
 
-    def get_best_move(self) -> Optional[Move]:
+    def get_best_move(self, on_progress=None) -> Optional[Move]:
+        """Find the best move.  on_progress(move, idx, total) is called for each
+        root move evaluated during the final depth pass."""
         moves = self._order_moves(MoveGenerator(self._board).generate_legal_moves())
         if not moves:
             self._top_moves = []
@@ -55,11 +57,14 @@ class Engine:
             alpha = -INF
             beta  =  INF
             best_score = -INF
+            is_final = current_depth == self._depth
 
             # Try the PV move (best from last iteration) first
             ordered = [best_move] + [m for m in moves if m != best_move]
 
-            for move in ordered:
+            for idx, move in enumerate(ordered):
+                if is_final and on_progress is not None:
+                    on_progress(move, idx, len(ordered))
                 self._board.make_move(move)
                 score = -self._negamax(current_depth - 1, -beta, -alpha, ply=1)
                 self._board.unmake_move()
